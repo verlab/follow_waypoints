@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import threading
 import rospy
@@ -57,7 +57,7 @@ class FollowPath(State):
         rospy.loginfo('Starting a tf listner.')
         self.tf = TransformListener()
         self.listener = tf.TransformListener()
-        self.distance_tolerance = rospy.get_param('waypoint_distance_tolerance', 0.0)
+        self.distance_tolerance = rospy.get_param('waypoint_distance_tolerance', 2.0)
 
     def execute(self, userdata):
         global waypoints
@@ -185,7 +185,7 @@ class GetPath(State):
             try:
                 pose = rospy.wait_for_message(topic, PoseWithCovarianceStamped, timeout=1)
             except rospy.ROSException as e:
-                if 'timeout exceeded' in e.message:
+                if 'timeout exceeded' in str(e):
                     continue  # no new waypoint within timeout, looping...
                 else:
                     raise e
