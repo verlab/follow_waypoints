@@ -5,15 +5,16 @@ import rospy
 import actionlib
 from smach import State,StateMachine
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray ,PointStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray
 from std_msgs.msg import Empty
 from tf import TransformListener
 import tf
 import math
 import rospkg
 import csv
-import time
 from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Odometry
+from geometry_msgs.msg import Pose
 
 # change Pose to the correct frame 
 def changePose(waypoint,target_frame):
@@ -45,49 +46,52 @@ waypoints = []
 class FollowPath(State):
     def __init__(self):
         State.__init__(self, outcomes=['success'], input_keys=['waypoints'])
-        self.frame_id = rospy.get_param('~goal_frame_id','map')
-        self.odom_frame_id = rospy.get_param('~odom_frame_id','odom')
-        self.base_frame_id = rospy.get_param('~base_frame_id','base_footprint')
-        self.duration = rospy.get_param('~wait_duration', 0.0)
+        self.frame_id = rospy.get_param('~goal_frame_id', 'map')
+        self.odom_topic = rospy.get_param('~odom_topic', '/lego_loam/odom')
+        self.distance_tolerance = rospy.get_param('~waypoint_distance_tolerance', 0.0)
+        
         # Get a move_base action client
         self.client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         rospy.loginfo('Connecting to move_base...')
         self.client.wait_for_server()
         rospy.loginfo('Connected to move_base.')
-        rospy.loginfo('Starting a tf listner.')
-        self.tf = TransformListener()
-        self.listener = tf.TransformListener()
-        self.distance_tolerance = rospy.get_param('waypoint_distance_tolerance', 0.0)
-
+        
+        # Subscribe to odometry topic
+        self.current_pose = Pose()
+        rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
+    
+    def odom_callback(self, msg):
+        self.current_pose = msg.pose.pose
+    
     def execute(self, userdata):
         global waypoints
+        
         # Execute waypoints each in sequence
         for waypoint in waypoints:
-            # Break if preempted
-            if waypoints == []:
+            if not waypoints:
                 rospy.loginfo('The waypoint queue has been reset.')
                 break
-            # Otherwise publish next waypoint as goal
+            
+            # Publish next waypoint as goal
             goal = MoveBaseGoal()
             goal.target_pose.header.frame_id = self.frame_id
             goal.target_pose.pose.position = waypoint.pose.pose.position
             goal.target_pose.pose.orientation = waypoint.pose.pose.orientation
+            
             rospy.loginfo('Executing move_base goal to position (x,y): %s, %s' %
-                    (waypoint.pose.pose.position.x, waypoint.pose.pose.position.y))
+                         (waypoint.pose.pose.position.x, waypoint.pose.pose.position.y))
             rospy.loginfo("To cancel the goal: 'rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}'")
             self.client.send_goal(goal)
-            if not self.distance_tolerance > 0.0:
-                self.client.wait_for_result()
-                rospy.loginfo("Waiting for %f sec..." % self.duration)
-                time.sleep(self.duration)
-            else:
-                #This is the loop which exist when the robot is near a certain GOAL point.
-                distance = 10
-                while(distance > self.distance_tolerance):
-                    now = rospy.Time.now()
-                    self.listener.waitForTransform(self.odom_frame_id, self.base_frame_id, now, rospy.Duration(4.0))
-                    trans,rot = self.listener.lookupTransform(self.odom_frame_id,self.base_frame_id, now)
-                    distance = math.sqrt(pow(waypoint.pose.pose.position.x-trans[0],2)+pow(waypoint.pose.pose.position.y-trans[1],2))
+            
+            # Wait until the robot is near the goal
+            distance = float('inf')
+            rate = rospy.Rate(10)  # 10 Hz loop rate
+            while distance > self.distance_tolerance and not rospy.is_shutdown():
+                print(self.current_pose)
+                distance = math.sqrt(pow(waypoint.pose.pose.position.x - self.current_pose.position.x, 2) +
+                                     pow(waypoint.pose.pose.position.y - self.current_pose.position.y, 2))
+                rate.sleep()
+        
         return 'success'
 
 def convert_PoseWithCovArray_to_PoseArray(waypoints):
