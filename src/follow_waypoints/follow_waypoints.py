@@ -55,14 +55,14 @@ class FollowPath(State):
         rospy.loginfo('Connecting to move_base...')
         self.client.wait_for_server()
         rospy.loginfo('Connected to move_base.')
-        
+
         # Subscribe to odometry topic
         self.current_pose = Pose()
         rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback)
     
     def odom_callback(self, msg):
         self.current_pose = msg.pose.pose
-    
+   
     def execute(self, userdata):
         global waypoints
         
