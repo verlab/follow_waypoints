@@ -47,7 +47,7 @@ class FollowPath(State):
     def __init__(self):
         State.__init__(self, outcomes=['success'], input_keys=['waypoints'])
         self.frame_id = rospy.get_param('~goal_frame_id', 'map')
-        self.odom_topic = rospy.get_param('~odom_topic', '/lego_loam/odom')
+        self.odom_topic = rospy.get_param('~odom_topic', '/odometry/global')
         self.distance_tolerance = rospy.get_param('~waypoint_distance_tolerance', 0.0)
         
         # Get a move_base action client
@@ -87,11 +87,9 @@ class FollowPath(State):
             distance = float('inf')
             rate = rospy.Rate(10)  # 10 Hz loop rate
             while distance > self.distance_tolerance and not rospy.is_shutdown():
-                print(self.current_pose)
                 distance = math.sqrt(pow(waypoint.pose.pose.position.x - self.current_pose.position.x, 2) +
                                      pow(waypoint.pose.pose.position.y - self.current_pose.position.y, 2))
                 rate.sleep()
-        
         return 'success'
 
 def convert_PoseWithCovArray_to_PoseArray(waypoints):
@@ -177,7 +175,7 @@ class GetPath(State):
         start_journey_thread = threading.Thread(target=wait_for_start_journey)
         start_journey_thread.start()
 
-        topic = self.addpose_topic;
+        topic = self.addpose_topic
         rospy.loginfo("Waiting to recieve waypoints via Pose msg on topic %s" % topic)
         rospy.loginfo("To start following waypoints: 'rostopic pub /path_ready std_msgs/Empty -1'")
         rospy.loginfo("OR")
@@ -204,11 +202,15 @@ class GetPath(State):
 class PathComplete(State):
     def __init__(self):
         State.__init__(self, outcomes=['success'])
+        self.path_complete_publisher = rospy.Publisher('/path_complete', Empty, queue_size=1)
 
     def execute(self, userdata):
         rospy.loginfo('###############################')
         rospy.loginfo('##### REACHED FINISH GATE #####')
         rospy.loginfo('###############################')
+        rospy.sleep(0.5)
+        self.path_complete_publisher.publish(Empty())
+        
         return 'success'
 
 def main():
