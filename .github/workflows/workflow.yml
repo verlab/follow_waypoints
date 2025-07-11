@@ -34,6 +34,7 @@ jobs:
         shell: bash
         run: |
           source /opt/ros/noetic/setup.bash
+          mkdir -p ~/catkin_ws/src
           cp -r . ~/catkin_ws/src/
           cd ~/catkin_ws
           rosdep update
